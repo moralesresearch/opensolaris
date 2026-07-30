@@ -212,6 +212,7 @@ typedef struct {
 					/*	embedded processor family */
 #define	EM_AMD64	62		/* AMDs x86-64 architecture */
 #define	EM_X86_64	EM_AMD64	/* (compatibility) */
+#define	EM_AARCH64	183		/* ARM 64-bit architecture */
 
 #define	EM_PDSP		63		/* Sony DSP Processor */
 #define	EM_UNKNOWN64	64
@@ -778,6 +779,10 @@ int	elfheadcheck(unsigned char, Elf32_Half, Elf32_Word);
 
 #if defined(ELF_TARGET_ALL) || defined(ELF_TARGET_AMD64)
 #include <sys/elf_amd64.h>
+#endif
+
+#if defined(ELF_TARGET_ALL) || defined(ELF_TARGET_AARCH64)
+#include <sys/elf_AARCH64.h>
 #endif
 
 #endif	/* _SYS_ELF_H */

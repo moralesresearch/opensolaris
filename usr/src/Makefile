@@ -34,6 +34,22 @@ include Targetdirs
 COMMON_SUBDIRS=	uts lib cmd ucblib ucbcmd
 
 #
+# Reproducible AArch64 bring-up targets.  These do not require a populated
+# Solaris proto area and therefore also run in Linux/macOS CI environments.
+#
+aarch64-bootstrap aarch64-image:
+	@cd uts/arm64pc && pwd && $(MAKE) all
+
+aarch64-check:
+	@cd uts/arm64pc && pwd && $(MAKE) check
+
+aarch64-smoke:
+	@cd uts/arm64pc && pwd && $(MAKE) smoke
+
+aarch64-dist:
+	@cd uts/arm64pc && pwd && $(MAKE) dist
+
+#
 # sparc needs to build both stand and psm, in that order
 # x86 needs to build psm and GRUB
 #

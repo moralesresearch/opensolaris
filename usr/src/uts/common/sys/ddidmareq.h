@@ -207,7 +207,7 @@ typedef struct ddi_dma_lim {
 
 } ddi_dma_lim_t;
 
-#elif defined(__x86)
+#elif defined(__x86) || defined(__aarch64__)
 
 /*
  * values for dlim_minxfer

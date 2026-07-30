@@ -219,10 +219,60 @@ extern "C" {
 #endif
 
 /*
+ * The following set of definitions characterize Solaris on ARM's
+ * 64-bit (AArch64) systems.
+ */
+#if defined(__aarch64__) || defined(__aarch64)
+
+#if !defined(__aarch64)
+#define	__aarch64
+#endif
+
+/*
+ * AArch64 is a little-endian LP64 architecture in the OpenSolaris port.
+ * Ordinary loads and stores tolerate unaligned addresses, but the
+ * exclusive and acquire/release forms (LDXR/STXR, LDAR/STLR) fault on a
+ * misaligned operand regardless of SCTLR_EL1.A, so alignment is required.
+ */
+#define	_LITTLE_ENDIAN
+#define	_STACK_GROWS_DOWNWARD
+#define	_LONG_LONG_LTOH
+#define	_BIT_FIELDS_LTOH
+#define	_IEEE_754
+#define	_CHAR_IS_SIGNED
+#define	_BOOL_ALIGNMENT			1
+#define	_CHAR_ALIGNMENT			1
+#define	_SHORT_ALIGNMENT		2
+#define	_INT_ALIGNMENT			4
+#define	_FLOAT_ALIGNMENT		4
+#define	_FLOAT_COMPLEX_ALIGNMENT	4
+#define	_LONG_ALIGNMENT			8
+#define	_LONG_LONG_ALIGNMENT		8
+#define	_DOUBLE_ALIGNMENT		8
+#define	_DOUBLE_COMPLEX_ALIGNMENT	8
+#define	_LONG_DOUBLE_ALIGNMENT		16
+#define	_LONG_DOUBLE_COMPLEX_ALIGNMENT	16
+#define	_POINTER_ALIGNMENT		8
+#define	_MAX_ALIGNMENT			16
+#define	_ALIGNMENT_REQUIRED		1
+#define	_LONG_LONG_ALIGNMENT_32		8
+
+#if !defined(_LP64)
+#define	_LP64
+#endif
+#if !defined(_I32LPx) && defined(_KERNEL)
+#define	_I32LPx
+#endif
+#define	_SUNOS_VTOC_16
+#define	_DMA_USES_PHYSADDR
+#define	_NO_FDISK_PRESENT
+#define	_SOFT_HOSTID
+
+/*
  * The following set of definitions characterize Solaris on AMD's
  * 64-bit systems.
  */
-#if defined(__x86_64) || defined(__amd64)
+#elif defined(__x86_64) || defined(__amd64)
 
 #if !defined(__amd64)
 #define	__amd64		/* preferred guard */

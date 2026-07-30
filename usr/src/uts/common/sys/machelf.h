@@ -33,6 +33,8 @@ extern "C" {
 
 #if defined(__amd64) || (defined(__i386) && defined(_ELF64))
 #include <sys/elf_amd64.h>
+#elif defined(__aarch64__)
+#include <sys/elf_AARCH64.h>
 #elif defined(__i386)
 #include <sys/elf_386.h>
 #elif defined(__sparc)

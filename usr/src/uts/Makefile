@@ -38,6 +38,8 @@ sparc_ARCHITECTURES = sun4v sun4u sparc
 
 i386_ARCHITECTURES = i86pc i86xpv intel
 
+aarch64_ARCHITECTURES = arm64pc arm64
+
 #
 # For i386 all architectures can be compiled in parallel.
 #
@@ -54,6 +56,14 @@ i386_PARALLEL = $(i386_ARCHITECTURES)
 #
 sparc_PREREQ = sun4
 sparc_PARALLEL = $(sparc_ARCHITECTURES)
+
+#
+# For aarch64 all architectures can be compiled in parallel.
+#
+# arm64/Makefile knows how to build prerequisites needed for parallel build.
+#
+aarch64_PREREQ = arm64
+aarch64_PARALLEL = $(aarch64_ARCHITECTURES)
 
 #
 # Platforms defined in $(MACH)_PARALLEL are built in parallel. DUMMY is placed
@@ -169,6 +179,7 @@ DYNHDRDIRS = common/rpcsvc common/idmap common/sys
 
 sparc_HDRDIRS= sun/sys
 i386_HDRDIRS= i86pc/vm i86xpv/vm
+aarch64_HDRDIRS= arm64pc/vm
 
 HDRDIRS= $(COMMON_HDRDIRS) $($(MACH)_HDRDIRS)
 install_h check: $(HDRDIRS) $($(MACH)_ARCHITECTURES)
@@ -218,8 +229,8 @@ ONC_PLUS:	$(ONC_FILES:%=%_onc_plus)
 # We need to manually prune usr/closed/uts/{i86xpv|sfmmu|i86pc} since
 # none of them exist.
 #
-SHARED_XRDIRS = $(sparc_ARCHITECTURES) $(i386_ARCHITECTURES) sun4 sfmmu	\
-	sun common
+SHARED_XRDIRS = $(sparc_ARCHITECTURES) $(i386_ARCHITECTURES) \
+	$(aarch64_ARCHITECTURES) sun4 sfmmu sun common
 CLOSED_XRDIRS = $(SHARED_XRDIRS:%=% ../../closed/uts/%)
 XRDIRS = $(SHARED_XRDIRS)
 CLOSED_XRDIRS_XEN = $(CLOSED_XRDIRS:../../closed/uts/i86xpv=)

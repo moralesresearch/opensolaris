@@ -81,23 +81,37 @@ CLOSED_BUILD=	$(CLOSED_BUILD_1:no=$(POUND_SIGN))
 EXPORT_RELEASE_BUILD=			$(POUND_SIGN)
 $(CLOSED_BUILD)EXPORT_RELEASE_BUILD=
 
-# SPARC_BLD is '#' for an Intel build.
-# INTEL_BLD is '#' for a Sparc build.
+# SPARC_BLD is '#' for an Intel or AArch64 build.
+# INTEL_BLD is '#' for a Sparc or AArch64 build.
+# AARCH64_BLD is '#' for a Sparc or Intel build.
 SPARC_BLD_1=    $(MACH:i386=$(POUND_SIGN))
-SPARC_BLD=      $(SPARC_BLD_1:sparc=)
+SPARC_BLD_2=    $(SPARC_BLD_1:aarch64=$(POUND_SIGN))
+SPARC_BLD=      $(SPARC_BLD_2:sparc=)
 INTEL_BLD_1=    $(MACH:sparc=$(POUND_SIGN))
-INTEL_BLD=      $(INTEL_BLD_1:i386=)
+INTEL_BLD_2=    $(INTEL_BLD_1:aarch64=$(POUND_SIGN))
+INTEL_BLD=      $(INTEL_BLD_2:i386=)
+AARCH64_BLD_1=  $(MACH:sparc=$(POUND_SIGN))
+AARCH64_BLD_2=  $(AARCH64_BLD_1:i386=$(POUND_SIGN))
+AARCH64_BLD=    $(AARCH64_BLD_2:aarch64=)
 
 STRIP_COMMENTS=	$(INTERNAL_RELEASE_BUILD)
 
 # set __GNUC= in the environment to build 32-bit with the gcc compiler.
-# The default is to use the Sun Studio compiler for all processor types.
+# Keep the historical Sun Studio default for the existing SPARC/x86 gate.
 __GNUC=		$(POUND_SIGN)
+
+# The AArch64 port has no Sun Studio compiler; $(aarch64_CC) et al are always
+# the GCC cross toolchain.  Force the GCC flag translations on so that we do
+# not hand Sun Studio-only options (-Xa, -errtags=yes, -xdebugformat=stabs,
+# ...) to gcc.  $(AARCH64_BLD) is empty only when $(MACH) is aarch64, so on
+# sparc and i386 the following line is a comment and the default above stands.
+$(AARCH64_BLD)__GNUC=
 
 # set __GNUC64= in the environment to build 64-bit with the gcc compiler.
 # Inherit the __GNUC value by default, and if that is set to $(POUND_SIGN)
 # then this means use the Sun Studio compiler.
 __GNUC64=	$(__GNUC)
+$(AARCH64_BLD)__GNUC64=
 
 # set __SSNEXT= in the enviroment to build with the 'next' release of
 # the Sun Studio compiler. This will cause command line options specific
@@ -246,6 +260,10 @@ INS.pyfile=	$(INS.file); $(TOUCH) -r $< $@
 # Set BUILD64=# in the environment to disable 64-bit amd64
 # builds on i386 machines.
 
+#
+# aarch64 needs no substitution here: MACH, MACH64 and MACH32 are all
+# "aarch64", so it simply falls through the sparc/i386 rules unchanged.
+#
 MACH64_1=	$(MACH:sparc=sparcv9)
 MACH64=		$(MACH64_1:i386=amd64)
 
@@ -254,6 +272,7 @@ MACH32=		$(MACH32_1:i386=i86)
 
 sparc_BUILD64=
 i386_BUILD64=
+aarch64_BUILD64=
 BUILD64=	$($(MACH)_BUILD64)
 
 #
@@ -263,6 +282,9 @@ BUILD64=	$($(MACH)_BUILD64)
 #
 CCMODE=			-Xa
 CCMODE64=		-Xa
+# GCC doesn't use -Xa; it defaults to gnu extensions mode
+$(__GNUC)CCMODE=
+$(__GNUC)CCMODE64=
 
 #
 # C compiler verbose mode. This is so we can enable it globally,
@@ -306,6 +328,7 @@ CCABS32=		-Wc,-xcode=abs32
 # 
 sparc_CCUNBOUND	= -Wd,-xsafe=unboundsym
 i386_CCUNBOUND	=
+aarch64_CCUNBOUND =
 CCUNBOUND	= $($(MACH)_CCUNBOUND)
 
 #
@@ -315,12 +338,22 @@ sparc_XARCH=	-m32
 sparcv9_XARCH=	-m64
 i386_XARCH=
 amd64_XARCH=	-m64 -Ui386 -U__i386
+aarch64_XARCH=
+
+#
+# GCC and Clang default 'char' to unsigned on AArch64 (AAPCS64), but
+# <sys/isa_defs.h> declares _CHAR_IS_SIGNED for the aarch64 block and the
+# rest of the tree assumes a signed plain char.  Force the signed default
+# into every aarch64 compilation flag set.
+#
+aarch64_SIGNED_CHAR=	-fsigned-char
 
 # assembler '-xarch' flag.  Different from compiler '-xarch' flag.
 sparc_AS_XARCH=		-xarch=v8plus
 sparcv9_AS_XARCH=	-xarch=v9
 i386_AS_XARCH=
 amd64_AS_XARCH=		-xarch=amd64 -P -Ui386 -U__i386
+aarch64_AS_XARCH=
 
 #
 # These flags define what we need to be 'standalone' i.e. -not- part
@@ -333,6 +366,8 @@ sparc_STAND_FLAGS=	-_gcc=-ffreestanding
 sparcv9_STAND_FLAGS=	-_gcc=-ffreestanding
 i386_STAND_FLAGS=	-_gcc=-ffreestanding
 amd64_STAND_FLAGS=	-xmodel=kernel
+aarch64_STAND_FLAGS=	-ffreestanding -mgeneral-regs-only \
+			$(aarch64_SIGNED_CHAR)
 
 SAVEARGS=		-Wu,-save_args
 amd64_STAND_FLAGS	+= $(SAVEARGS)
@@ -347,13 +382,26 @@ ILDOFF=			-xildoff
 XDEPEND=		-xdepend
 XFFLAG=			-xF=%all
 XESS=			-xs
-XSTRCONST=		-xstrconst 
+XSTRCONST=		-xstrconst
+# GCC doesn't have these Sun Studio flags
+$(__GNUC)ILDOFF=
+$(__GNUC)XDEPEND=
+$(__GNUC)XFFLAG=
+$(__GNUC)XESS=
+$(__GNUC)XSTRCONST=
 
 #
 # turn warnings into errors (C)
+# Sun Studio flags are translated by the cw wrapper when using gcc.
 CERRWARN = -errtags=yes -errwarn=%all
 CERRWARN += -erroff=E_EMPTY_TRANSLATION_UNIT
 CERRWARN += -erroff=E_STATEMENT_NOT_REACHED
+#
+# GCC-specific warning flags (applied when building with GCC)
+$(__GNUC)CERRWARN = -Wall -Wno-unknown-pragmas -Wno-missing-braces
+$(__GNUC)CERRWARN += -Wno-sign-compare -Wno-parentheses -Wno-uninitialized
+$(__GNUC)CERRWARN += -Wno-implicit-function-declaration
+$(__GNUC)CERRWARN += -Wno-unused -Wno-unused-parameter
 
 #
 # turn warnings into errors (C++)
@@ -364,6 +412,11 @@ C99_ENABLE=	-xc99=%all
 C99_DISABLE=	-xc99=%none
 C99MODE=	$(C99_DISABLE)
 C99LMODE=	$(C99MODE:-xc99%=-Xc99%)
+# GCC equivalents
+$(__GNUC)C99_ENABLE=	-std=gnu99
+$(__GNUC)C99_DISABLE=
+$(__GNUC)C99MODE=
+$(__GNUC)C99LMODE=
 
 # In most places, assignments to these macros should be appended with +=
 # (CPPFLAGS.master allows values to be prepended to CPPFLAGS).
@@ -372,17 +425,20 @@ sparcv9_CFLAGS=	$(sparcv9_XARCH) -dalign $(CCVERBOSE) $(V9ABIWARN) $(CCREGSYM) \
 		$(CCSTATICSYM)
 i386_CFLAGS=	$(i386_XARCH)
 amd64_CFLAGS=	$(amd64_XARCH)
+aarch64_CFLAGS=	$(aarch64_XARCH) $(aarch64_SIGNED_CHAR)
 
 sparc_ASFLAGS=	$(sparc_AS_XARCH)
 sparcv9_ASFLAGS=$(sparcv9_AS_XARCH)
 i386_ASFLAGS=	$(i386_AS_XARCH)
 amd64_ASFLAGS=	$(amd64_AS_XARCH)
+aarch64_ASFLAGS=$(aarch64_AS_XARCH)
 
 #
 sparc_COPTFLAG=		-xO3
 sparcv9_COPTFLAG=	-xO3
 i386_COPTFLAG=		-O
 amd64_COPTFLAG=		-xO3
+aarch64_COPTFLAG=	-O2
 
 COPTFLAG= $($(MACH)_COPTFLAG)
 COPTFLAG64= $($(MACH64)_COPTFLAG)
@@ -390,6 +446,7 @@ COPTFLAG64= $($(MACH64)_COPTFLAG)
 # When -g is used, the compiler globalizes static objects
 # (gives them a unique prefix). Disable that.
 CNOGLOBAL= -W0,-noglobal
+$(__GNUC)CNOGLOBAL=
 
 # Direct the Sun Studio compiler to use a static globalization prefix based on the
 # name of the module rather than something unique. Otherwise, objects
@@ -398,6 +455,7 @@ CNOGLOBAL= -W0,-noglobal
 #
 # In the same spirit, this will also remove the date from the N_OPT stab.
 CGLOBALSTATIC= -W0,-xglobalstatic
+$(__GNUC)CGLOBALSTATIC=
 
 # Normally, gcc uses indirect DWARF strings to save space.  However,
 # this causes relocations that ctfconvert cannot handle.  Disable this.
@@ -409,9 +467,10 @@ CALLSYMS=	-W0,-xdbggen=no%usedonly
 
 #
 # Default debug format for Sun Studio 11 is dwarf, so force it to
-# generate stabs.
+# generate stabs.  GCC always uses DWARF.
 #
 DEBUGFORMAT=	-xdebugformat=stabs
+$(__GNUC)DEBUGFORMAT=
 
 #
 # Flags used to build in debug mode for ctf generation.  Bugs in the Devpro
@@ -419,6 +478,7 @@ DEBUGFORMAT=	-xdebugformat=stabs
 #
 CTF_FLAGS_sparc	= -g -Wc,-Qiselect-T1 $(C99MODE) $(CNOGLOBAL) $(CDWARFSTR)
 CTF_FLAGS_i386	= -g $(C99MODE) $(CNOGLOBAL) $(CDWARFSTR)
+CTF_FLAGS_aarch64 = -g $(C99MODE) $(CNOGLOBAL) $(CDWARFSTR)
 CTF_FLAGS	= $(CTF_FLAGS_$(MACH)) $(DEBUGFORMAT)
 
 #
@@ -441,6 +501,7 @@ sparc_SPACEFLAG		= -xspace -W0,-Lt
 sparcv9_SPACEFLAG	= -xspace -W0,-Lt
 i386_SPACEFLAG		= -xspace
 amd64_SPACEFLAG		=
+aarch64_SPACEFLAG	=
 
 SPACEFLAG		= $($(MACH)_SPACEFLAG)
 SPACEFLAG64		= $($(MACH64)_SPACEFLAG)
@@ -454,6 +515,7 @@ sparc_IROPTFLAG		= -W2,-xwrap_int
 sparcv9_IROPTFLAG	= -W2,-xwrap_int
 i386_IROPTFLAG		=
 amd64_IROPTFLAG		=
+aarch64_IROPTFLAG	=
 
 IROPTFLAG		= $($(MACH)_IROPTFLAG)
 IROPTFLAG64		= $($(MACH64)_IROPTFLAG)
@@ -462,6 +524,7 @@ sparc_XREGSFLAG		= -xregs=no%appl
 sparcv9_XREGSFLAG	= -xregs=no%appl
 i386_XREGSFLAG		=
 amd64_XREGSFLAG		=
+aarch64_XREGSFLAG	=
 
 XREGSFLAG		= $($(MACH)_XREGSFLAG)
 XREGSFLAG64		= $($(MACH64)_XREGSFLAG)
@@ -531,11 +594,13 @@ amd64_CCFLAGS=		$(amd64_XARCH) -compat=5 \
 			-Qoption ccfe -messages=no%anachronism \
 			-Qoption ccfe -features=no%conststrings \
 			$(CCERRWARN)
+aarch64_CCFLAGS=	$(aarch64_XARCH) $(aarch64_SIGNED_CHAR)
 
 sparc_CCOPTFLAG=	-O
 sparcv9_CCOPTFLAG=	-O
 i386_CCOPTFLAG=		-O
 amd64_CCOPTFLAG=	-O
+aarch64_CCOPTFLAG=	-O2
 
 CCOPTFLAG=	$($(MACH)_CCOPTFLAG)
 CCOPTFLAG64=	$($(MACH64)_CCOPTFLAG)
@@ -554,6 +619,7 @@ ELFWRAP_FLAGS64	=	-64
 #
 MAPFILE.NED_i386 =	$(SRC)/common/mapfiles/i386/map.noexdata
 MAPFILE.NED_sparc =
+MAPFILE.NED_aarch64 =
 MAPFILE.NED =		$(MAPFILE.NED_$(MACH))
 MAPFILE.PGA =		$(SRC)/common/mapfiles/$(MACH)/map.pagealign
 MAPFILE.NES =		$(SRC)/common/mapfiles/common/map.noexstk
@@ -720,6 +786,19 @@ amd64_AS=		$(ONBLD_TOOLS)/bin/$(MACH)/aw
 amd64_LD=		/usr/ccs/bin/ld
 amd64_LINT=		$(SPRO_VROOT)/bin/lint
 
+#
+# AArch64 cross-compilation toolchain.
+# CROSS_COMPILE can be set in the environment (e.g. aarch64-none-elf-)
+# to prefix all tool names for cross-compilation.
+#
+CROSS_COMPILE=
+aarch64_CC=		$(CROSS_COMPILE)gcc
+aarch64_CCC=		$(CROSS_COMPILE)g++
+aarch64_CPP=		$(CROSS_COMPILE)cpp
+aarch64_AS=		$(CROSS_COMPILE)as
+aarch64_LD=		$(CROSS_COMPILE)ld
+aarch64_LINT=		$(TRUE)
+
 NATIVECC=		$($(NATIVE_MACH)_CC)
 NATIVECCC=		$($(NATIVE_MACH)_CCC)
 NATIVECPP=		$($(NATIVE_MACH)_CPP)
@@ -785,6 +864,7 @@ sparc_C_PICFLAGS =	-K pic
 sparcv9_C_PICFLAGS =	-K pic
 i386_C_PICFLAGS =	-K pic
 amd64_C_PICFLAGS =	-K pic
+aarch64_C_PICFLAGS =	-fPIC
 C_PICFLAGS =		$($(MACH)_C_PICFLAGS)
 C_PICFLAGS64 =		$($(MACH64)_C_PICFLAGS)
 
@@ -792,6 +872,7 @@ sparc_C_BIGPICFLAGS =	-K PIC
 sparcv9_C_BIGPICFLAGS =	-K PIC
 i386_C_BIGPICFLAGS =	-K PIC
 amd64_C_BIGPICFLAGS =	-K PIC
+aarch64_C_BIGPICFLAGS =	-fPIC
 C_BIGPICFLAGS =		$($(MACH)_C_BIGPICFLAGS)
 C_BIGPICFLAGS64 =	$($(MACH64)_C_BIGPICFLAGS)
 

@@ -185,7 +185,7 @@ typedef struct {		/* kernel syscall set type */
  */
 #if defined(__sparc)
 #define	__KERN_NAUXV_IMPL 19
-#elif defined(__i386) || defined(__amd64)
+#elif defined(__i386) || defined(__amd64) || defined(__aarch64__)
 #define	__KERN_NAUXV_IMPL 21
 #endif
 
