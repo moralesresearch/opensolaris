@@ -34,8 +34,9 @@ include Targetdirs
 COMMON_SUBDIRS=	uts lib cmd ucblib ucbcmd
 
 #
-# Reproducible AArch64 bring-up targets.  These do not require a populated
-# Solaris proto area and therefore also run in Linux/macOS CI environments.
+# Reproducible AArch64 and x86_64 bring-up targets.  These do not require
+# a populated Solaris proto area and therefore also run in Linux/macOS CI
+# environments with a stock Clang/LLD toolchain.
 #
 aarch64-bootstrap aarch64-image:
 	@cd uts/arm64pc && pwd && $(MAKE) all
@@ -48,6 +49,32 @@ aarch64-smoke:
 
 aarch64-dist:
 	@cd uts/arm64pc && pwd && $(MAKE) dist
+
+aarch64-iso:
+	@cd uts/arm64pc && pwd && $(MAKE) iso
+
+aarch64-smoke-iso:
+	@cd uts/arm64pc && pwd && $(MAKE) smoke-iso
+
+#
+# x86_64 (amd64pc) bootstrap kernel and its BIOS + UEFI hybrid GRUB ISO.
+#
+x86_64-bootstrap x86_64-image:
+	@cd uts/amd64pc && pwd && $(MAKE) all
+
+x86_64-check:
+	@cd uts/amd64pc && pwd && $(MAKE) check
+
+x86_64-iso:
+	@cd uts/amd64pc && pwd && $(MAKE) iso
+
+x86_64-smoke-iso:
+	@cd uts/amd64pc && pwd && $(MAKE) smoke-iso
+
+x86_64-dist:
+	@cd uts/amd64pc && pwd && $(MAKE) dist
+
+bootstrap-isos: x86_64-iso aarch64-iso
 
 #
 # sparc needs to build both stand and psm, in that order

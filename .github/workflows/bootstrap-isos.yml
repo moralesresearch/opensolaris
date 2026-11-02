@@ -1,0 +1,163 @@
+name: Bootstrap ISOs (x86_64 + AArch64)
+
+on:
+  push:
+    branches: [master]
+    tags: ['iso-v*', 'arm64-v*']
+    paths:
+      - '.github/workflows/bootstrap-isos.yml'
+      - 'Makefile'
+      - 'usr/src/Makefile'
+      - 'usr/src/Makefile.master'
+      - 'usr/src/uts/Makefile*'
+      - 'usr/src/uts/common/sys/**'
+      - 'usr/src/uts/common/os/**'
+      - 'usr/src/uts/common/io/**'
+      - 'usr/src/uts/common/vm/**'
+      - 'usr/src/uts/common/disp/**'
+      - 'usr/src/uts/common/krtld/**'
+      - 'usr/src/uts/arm64/**'
+      - 'usr/src/uts/arm64pc/**'
+      - 'usr/src/uts/intel/**'
+      - 'usr/src/uts/i86pc/sys/**'
+      - 'usr/src/uts/amd64pc/**'
+  pull_request:
+    paths:
+      - '.github/workflows/bootstrap-isos.yml'
+      - 'Makefile'
+      - 'usr/src/Makefile'
+      - 'usr/src/Makefile.master'
+      - 'usr/src/uts/Makefile*'
+      - 'usr/src/uts/common/sys/**'
+      - 'usr/src/uts/common/os/**'
+      - 'usr/src/uts/common/io/**'
+      - 'usr/src/uts/common/vm/**'
+      - 'usr/src/uts/common/disp/**'
+      - 'usr/src/uts/common/krtld/**'
+      - 'usr/src/uts/arm64/**'
+      - 'usr/src/uts/arm64pc/**'
+      - 'usr/src/uts/intel/**'
+      - 'usr/src/uts/i86pc/sys/**'
+      - 'usr/src/uts/amd64pc/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  aarch64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install cross-build, ISO and emulation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            clang lld llvm make qemu-system-arm qemu-efi-aarch64 \
+            xorriso mtools
+
+      - name: Build, inspect, and boot the kernel (QEMU -kernel)
+        run: make -C usr/src/uts/arm64pc clean all check smoke-all
+
+      - name: Build and boot the UEFI ISO (CD-ROM and USB disk)
+        run: make -C usr/src/uts/arm64pc iso smoke-iso dist
+
+      - name: Create checksums
+        run: |
+          cd build/arm64pc
+          sha256sum \
+            opensolaris-aarch64.iso \
+            opensolaris-aarch64.elf \
+            opensolaris-aarch64.img \
+            opensolaris-aarch64.map \
+            BOOTAA64.EFI \
+            opensolaris-aarch64-qemu-virt.tar.gz \
+            > SHA256SUMS.aarch64
+
+      - name: Upload images
+        uses: actions/upload-artifact@v4
+        with:
+          name: opensolaris-aarch64
+          if-no-files-found: error
+          path: |
+            build/arm64pc/opensolaris-aarch64.iso
+            build/arm64pc/opensolaris-aarch64.elf
+            build/arm64pc/opensolaris-aarch64.img
+            build/arm64pc/opensolaris-aarch64.map
+            build/arm64pc/BOOTAA64.EFI
+            build/arm64pc/opensolaris-aarch64-qemu-virt.tar.gz
+            build/arm64pc/SHA256SUMS.aarch64
+
+  x86_64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install cross-build, ISO and emulation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            clang lld llvm make python3 qemu-system-x86 ovmf \
+            grub-common grub-pc-bin grub-efi-amd64-bin xorriso mtools
+
+      - name: Build and inspect the kernel
+        run: make -C usr/src/uts/amd64pc clean all check
+
+      - name: Build and boot the BIOS + UEFI ISO
+        run: |
+          REQUIRE_ALL_PLATFORMS=1 make -C usr/src/uts/amd64pc iso
+          make -C usr/src/uts/amd64pc smoke-iso dist
+
+      - name: Create checksums
+        run: |
+          cd build/amd64pc
+          sha256sum \
+            opensolaris-x86_64.iso \
+            opensolaris-x86_64.elf \
+            opensolaris-x86_64.map \
+            opensolaris-x86_64.tar.gz \
+            > SHA256SUMS.x86_64
+
+      - name: Upload images
+        uses: actions/upload-artifact@v4
+        with:
+          name: opensolaris-x86_64
+          if-no-files-found: error
+          path: |
+            build/amd64pc/opensolaris-x86_64.iso
+            build/amd64pc/opensolaris-x86_64.elf
+            build/amd64pc/opensolaris-x86_64.map
+            build/amd64pc/opensolaris-x86_64.tar.gz
+            build/amd64pc/SHA256SUMS.x86_64
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/iso-v') || startsWith(github.ref, 'refs/tags/arm64-v')
+    needs: [aarch64, x86_64]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download verified images
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" \
+              --title "OpenSolaris bootstrap ISOs $GITHUB_REF_NAME" \
+              --generate-notes
+          gh release upload "$GITHUB_REF_NAME" artifacts/* --clobber

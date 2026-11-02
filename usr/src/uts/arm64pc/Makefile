@@ -18,6 +18,18 @@ IMAGE=		$(TARGET).img
 MAP=		$(TARGET).map
 ASSYM=		$(BUILD)/assym.h
 ASSYM_ASM=	$(BUILD)/genassym.s
+ISO=		$(TARGET).iso
+EFI_LOADER=	$(BUILD)/BOOTAA64.EFI
+LLD_LINK_CMD?=	lld-link
+
+#
+# The UEFI loader is a PE/COFF application, so it is compiled for the
+# Windows/UEFI flavour of the same AArch64 target and linked by lld-link.
+#
+EFI_FLAGS=	--target=aarch64-unknown-windows -ffreestanding -fno-builtin \
+		-fshort-wchar -fno-stack-protector -mgeneral-regs-only \
+		-nostdinc -O2 -Wall -Wextra -Werror
+EFI_OBJS=	$(BUILD)/efiboot.obj $(BUILD)/efi_enter.obj
 
 INCLUDES=	-I. -I../arm64 -I../common -I../../head
 DEFINES=	-D_KERNEL -D_MACHDEP -D__EXTENSIONS__ -DARM64_BOOTSTRAP
@@ -68,7 +80,7 @@ OBJS=	$(BUILD)/dboot_arm64.o \
 
 ARCH_HEADERS=	../arm64/sys/*.h ../arm64/asm/*.h sys/*.h
 
-.PHONY: all clean check common-check smoke smoke-all dist
+.PHONY: all clean check common-check smoke smoke-all dist efi iso smoke-iso
 
 all: $(ELF) $(IMAGE)
 
@@ -192,6 +204,32 @@ $(ELF): $(OBJS) arm64pc.ld
 $(IMAGE): $(ELF)
 	$(OBJCOPY_CMD) -O binary $(ELF) $(IMAGE)
 
+$(BUILD)/efiboot.obj: efi/efiboot.c efi/efi.h $(BUILD)/.dir
+	$(CC_CMD) $(EFI_FLAGS) -c efi/efiboot.c -o $@
+
+$(BUILD)/efi_enter.obj: efi/efi_enter.S $(BUILD)/.dir
+	$(CC_CMD) --target=aarch64-unknown-windows -c efi/efi_enter.S -o $@
+
+$(EFI_LOADER): $(EFI_OBJS)
+	$(LLD_LINK_CMD) /subsystem:efi_application /entry:efi_main \
+	    /nodefaultlib /machine:arm64 /out:$@ $(EFI_OBJS)
+
+efi: $(EFI_LOADER)
+
+$(ISO): $(EFI_LOADER) $(ELF) tools/mkiso.sh
+	./tools/mkiso.sh $(EFI_LOADER) $(ELF) $@
+
+iso: $(ISO)
+
+#
+# Boot the ISO through UEFI firmware: as optical media at EL2 with four
+# CPUs, and as a raw disk (USB stick) at EL1.
+#
+smoke-iso: $(ISO)
+	QEMU_MEDIA=cdrom QEMU_SMP=4 ./tools/smoke-qemu.sh $(ISO)
+	QEMU_MEDIA=disk QEMU_MACHINE='virt,gic-version=3,acpi=off' \
+	    ./tools/smoke-qemu.sh $(ISO)
+
 check: all common-check $(ASSYM)
 	$(READELF_CMD) -h $(ELF)
 	$(READELF_CMD) -s $(ELF) | grep ' _start$$'
@@ -246,10 +284,10 @@ smoke-all: all
 	QEMU_MACHINE='virt,gic-version=3,virtualization=on' QEMU_SMP=4 \
 	    ./tools/smoke-qemu.sh $(IMAGE)
 
-dist: all
+dist: all iso
 	tar -czf $(TARGET)-qemu-virt.tar.gz -C $(BUILD) \
 	    opensolaris-aarch64.elf opensolaris-aarch64.img \
-	    opensolaris-aarch64.map
+	    opensolaris-aarch64.map BOOTAA64.EFI
 
 clean:
 	rm -rf $(BUILD)
